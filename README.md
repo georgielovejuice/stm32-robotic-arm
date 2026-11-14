@@ -1,26 +1,88 @@
-# Autonomous Robotic Arm
+# Multi-Mode Robotic Arm
 
-A planned six-joint robotic arm that finds a coloured block, picks it up and places it in a target box. This is a third-year microcontroller project.
+Voice-controlled 6-DOF arm. Say **"pick, red box, yes"**: a depth camera finds the block, the STM32 solves IK, and the arm places it on your hand.
 
-## Four control modes
+![STM32](https://img.shields.io/badge/STM32-F767ZI-03234B?logo=stmicroelectronics&logoColor=white)
+![C](https://img.shields.io/badge/C-bare--metal-A8B9CC?logo=c&logoColor=black)
+![Python](https://img.shields.io/badge/Python-RealSense-3776AB?logo=python&logoColor=white)
+![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-4-A22846?logo=raspberrypi&logoColor=white)
+![Fusion](https://img.shields.io/badge/CAD-Fusion-FF6B00?logo=autodesk&logoColor=white)
 
-| Mode | What you do |
+<p align="center">
+  <img src="docs/media/hero-arm.jpg" alt="Robotic arm next to the drop station with coloured blocks" width="820">
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/xyfyx_k8d-4"><b>▶ Demo video</b></a> ·
+  <a href="https://github.com/georgielovejuice/stm32-robotic-arm/releases/latest/download/final-report.pdf"><b>📄 Report</b></a>
+</p>
+
+## Features
+
+- **On-chip keyword spotting**: CNN (X-CUBE-AI) on 2× INMP441 I²S mics, 21 words, ~43 ms per inference
+- **Closed-form IK + FK**: four modes: Voice, Cartesian, Joint Group, Single-Joint
+- **Depth vision**: RealSense D435 on a Pi 4, RANSAC table plane + height/colour segmentation
+- **Camera → robot calibration**: Kabsch/SVD, 8.9 mm RMS
+- **50 Hz motion pipeline**: trapezoidal ramps, synchronised joints, joint limits
+- **Bare-metal firmware**: ISR + main loop, event queue, DMA for audio, ADC and UART
+
+## My part
+
+- **CAD**: arm and console modelled in Fusion, printed in PETG
+- **Pi vision**: D435 → robot XYZ for blocks and palm, UART bridge service
+- **Firmware**: `pi_link` (USART6 DMA ring buffer, idle-line framing) and the ILI9341 LCD port with touch input
+
+## Architecture
+
+![System block diagram](docs/media/block-diagram.png)
+
+```text
+STM32 → Pi   FIND red_box
+Pi → STM32   OBJ red_box 240 12 30     # mm, robot frame, 6–11 ms reply
+```
+
+## Vision
+
+![Vision pipeline](docs/media/vision-pipeline.jpg)
+![Hand tracking](docs/media/vision-hand.jpg)
+
+## Hardware
+
+| | |
 |---|---|
-| **Auto/Voice** | Say a fixed command; the camera finds the block and the arm moves it. |
-| **Cartesian** | Use the KY-023 joystick for X/Y and the KY-040 knob for Z. |
-| **Joint Group** | Use the joystick to move two selected joints. |
-| **Single-Joint Service** | Select and test one joint at a time. |
+| ![System top view](docs/media/system-top.jpg) | ![LCD pages](docs/media/lcd-pages.jpg) |
+| ![Arm CAD](docs/media/cad-arm.png) | ![Console CAD](docs/media/cad-console.png) |
 
-The mode is chosen on the touch LCD (mode cards). There is no MODE or Hold-to-Enable button (`core-config.md` v1.3).
+NUCLEO-F767ZI · Pi 4 + D435 · 3× MG996R + 3× SG92R · ILI9341 touch LCD · KY-023 + KY-040 · 3S LiPo → 6.0 V / 5.1 V bucks
 
-## How it works
+<details>
+<summary>Flowchart, voice state machine, wiring</summary>
 
-The **Raspberry Pi 4** processes the RGB-D camera and sends object positions to the **STM32 NUCLEO-F767ZI** over a 3.3 V GPIO UART link. The STM32 runs a TC-ResNet voice-command model through two INMP441 microphones and will calculate inverse kinematics (joint angles from a target position); it drives six servos through an SN74AHCT244N signal buffer (until it is fitted, the servos are wired direct through 330 Ω; see `ProjectDevGuide/docs/core-config.md` §11). A **2.8-inch ILI9341 touch LCD** (the Lab 8 board) shows status. There is no hardware emergency stop, limit switch or servo-rail sense (`core-config.md` v1.4): switch the servo supply off to stop for sure.
+![Flowchart](docs/media/flowchart.png)
+![Voice states](docs/media/voice-states.png)
+![Connectivity](docs/media/connectivity.png)
+![Circuit](docs/media/circuit.png)
 
-## Project files
+</details>
 
-- [Final build specification](study/robotic-arm-final-build-spec.md): equipment, wiring, build order and safety checks.
-- [System guide](study/robotic-arm-guide.md): mode controls and STM32 responsibilities.
-- [Code and bench tests](code/README.md): the servo calibration bench and the merged STM32 firmware skeleton.
+## Results
 
-**Current code status:** the servo bench tests and the merged STM32 HAL skeleton are in the repository. The skeleton includes the app loop, safety, motion/calibration, modes, voice, Pi link and LCD framework, but IK/FK and arm geometry are still placeholders and the installed servo limits/home are not calibrated. The measured unloaded servo values are in [the canonical calibration table](ProjectDevGuide/docs/servo-calibration.md). The Pi bridge (`ProjectDevGuide/tools/pi/`) answers block and hand requests from the D435, but sends camera-frame mm until the camera-to-robot calibration is done. Installed-arm validation is still open.
+| Metric | Result |
+|---|---|
+| Voice command accuracy | 75–99% confidence, 0 false accepts |
+| Positioning (calibration RMS) | 8.9 mm |
+| Grasp success | ~75–80% |
+| Consecutive pick-and-place | 7–8 / 10 (all misses came from camera calibration) |
+
+## Build
+
+```sh
+python ProjectDevGuide/ci/build_firmware.py   # STM32CubeIDE 2.2 toolchain, 0 warnings
+sh ProjectDevGuide/tests/host/run.sh          # host tests
+```
+
+Firmware in `RoboticArmMain/App/`, Pi code in `ProjectDevGuide/tools/pi/`.
+
+---
+
+KMITL Microcontroller Interfacing 2026, team of 7. Forked from [Potaeeatsthis/2026-micro-con](https://github.com/Potaeeatsthis/2026-micro-con). Arm based on [OmArTronics 6-DOF](https://omartronics.com/diy-6-dof-robotic-arm-build/).
