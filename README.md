@@ -26,12 +26,6 @@ Voice-controlled 6-DOF arm. Say **"pick, red box, yes"**: a depth camera finds t
 - **50 Hz motion pipeline**: trapezoidal ramps, synchronised joints, joint limits
 - **Bare-metal firmware**: ISR + main loop, event queue, DMA for audio, ADC and UART
 
-## My part
-
-- **CAD**: arm and console modelled in Fusion, printed in PETG
-- **Pi vision**: D435 → robot XYZ for blocks and palm, UART bridge service
-- **Firmware**: `pi_link` (USART6 DMA ring buffer, idle-line framing) and the ILI9341 LCD port with touch input
-
 ## Architecture
 
 ![System block diagram](docs/media/block-diagram.png)
